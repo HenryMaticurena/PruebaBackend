@@ -15,6 +15,8 @@ app.use(express.urlencoded({
     extended: true
 }));
 
+let connection;
+
 function messageSuccess(respuesta,valor) {
     respuesta.set('Content-Type', 'application/json');
     respuesta.status(200).send(JSON.stringify({
@@ -48,17 +50,17 @@ function messageErrorServer(respuesta,errorcod) {
 }
 
     // Release the connection
-    function releaseConection(connection,respuesta) {
-        connection.release(
-            function (err) {
-                if (err) {
-                    messageErrorServer(respuesta,err);
-                    return;
-                }
-            });
+function releaseConection(connection,respuesta) {
+    connection.release(
+        function (err) {
+            if (err) {
+                messageErrorServer(respuesta,err);
+                return;
+            }
+        });
     }
 
-
+var resultado;
 /////Crear un post de pre_transacciones/inicializar////// en espera
 app.post('/pre_transacciones/inicializar', async function (req, res,next) {
     //EXTRAIGO LOS HEADERS REQUERIDOS
@@ -85,104 +87,81 @@ app.post('/pre_transacciones/inicializar', async function (req, res,next) {
             return
         }
         
-        await oracledb.getConnection(dbConfig, async function (err, connection) {
-            if (err) {
-                messageErrorServer(res,err);
-                return;
-            }
-            //Valido que el codigo_empresa exista en la db
-            await connection.execute("SELECT count(codigo_empresa) FROM latino_owner.daf_empresas WHERE codigo_empresa = :code", {code: header_codigoEmpresa}, function (err, result) {
-                if (err) {
-                    messageErrorServer(res,err);
-                    return;
-                } else {
-                    if(result.rows[0][0] === 0){
-                        messageErrorValidate(res);
-                        return;
-                    }
-                    
-                }
-                // Release the connection
-                releaseConection(connection,res);
-            });
+        try {
+            connection = await oracledb.getConnection(dbConfig);
 
-            //Guardo los valores del body a usar
-            var secuenciaUser= await req.body.secuenciaUsuario;
-            var idTurno=req.body.idTurno;
-            var idcaja=req.body.caja;
-            var nemonicoCanalFacture = req.body.nemonicoCanalFacturacion;
-            
-             //Valido que la nemonicoCanalFacture exista
-            if("FACTURA" != nemonicoCanalFacture.toUpperCase() && "COTIZACION"!= nemonicoCanalFacture.toUpperCase()){
+        } catch (error) {
+            messageErrorServer(res,error);
+                return;
+        }
+
+        try {
+            //Valido que el codigo_empresa exista en la db
+            resultado =  await connection.execute("SELECT count(codigo_empresa) FROM latino_owner.daf_empresas WHERE codigo_empresa = :code", {code: header_codigoEmpresa});
+            if(resultado.rows[0][0] === 0){
                 messageErrorValidate(res);
                 return;
             }
-            //Valido que la Secuencia de usuario exista
-            
-            await connection.execute("SELECT count(SECUENCIA_USUARIO) FROM latino_owner.dafx_usuarios_sistema WHERE SECUENCIA_USUARIO = :code", {code: secuenciaUser}, function (err, result) {
-                if (err) {
-                    messageErrorServer(res,err);
-                    return;
-                } else {
-                    if(result.rows[0][0] === 0){
-                        messageErrorValidate(res);
-                        return;
-                    }
-                    
-                }
-                // Release the connection
-                releaseConection(connection,res);
-            });
+        } catch (error) {
+            messageErrorServer(res,error);
+            return;
+        }
 
-            await connection.execute("SELECT max(codigo_pre_transaccion) FROM latino_owner.fac_pre_transacciones", {}, async function (err, result) {
-                if (err) {
-                    messageErrorServer(res,err);
-                } else {
-                    var idpretr=result.rows[0][0]+1;
-                    
-                    await connection.execute("SELECT CODIGO_USUARIO FROM latino_owner.dafx_usuarios_sistema WHERE SECUENCIA_USUARIO = :codes", {codes: secuenciaUser}, async function (err, result) {
-                        if (err) {
-                            messageErrorServer(res,err);
-                        } else {
-                            var codUser = result.rows[0][0];
-                            console.log(result);
-                            await connection.execute("Insert into latino_owner.fac_pre_transacciones values (:codPreTransac,:codEmpre,:codSucur,:codCaja,:NumerPun,"
-                            +":SecuenUs,:codUsuario,:TipoPretr,'S',:SecuenUsuarioIngreso,:UsuarioIngreso,SYSDATE,null,null,null)", {
-                                codPreTransac:idpretr,
-                                codEmpre:header_codigoEmpresa.toString(),
-                                codSucur:idcaja['codigoSucursal'],
-                                codCaja:idcaja['codigoCaja'],
-                                NumerPun:idcaja['numeroPuntoEmision'],
-                                SecuenUs:secuenciaUser,
-                                codUsuario:codUser,
-                                TipoPretr:nemonicoCanalFacture,
-                                SecuenUsuarioIngreso:secuenciaUser,
-                                UsuarioIngreso:codUser,
-                            }, function (err, result) {
-                            if (err) {
-                        
-                                messageErrorServer(res,err);
-                                return;
-                            } else {
-                                messageSuccess(res,idpretr);
-                            }
-                        // Release the connection
-                             releaseConection(connection,res);
-                            });
-                            
-                        }
-                        // Release the connection
-                        releaseConection(connection,res);
-                    });
-                    
-                    
-                }
-                // Release the connection
-                releaseConection(connection,res);
-            });
-            
+        //Guardo los valores del body a usar
+        var secuenciaUser= await req.body.secuenciaUsuario;
+        var idTurno=req.body.idTurno;
+        var idcaja=req.body.caja;
+        var nemonicoCanalFacture = req.body.nemonicoCanalFacturacion;
+        console.log(secuenciaUser);
 
-        });
+        //Valido que la nemonicoCanalFacture exista
+        if("FACTURA" != nemonicoCanalFacture.toUpperCase() && "COTIZACION"!= nemonicoCanalFacture.toUpperCase()){
+            messageErrorValidate(res);
+            return;
+        }
+
+        //Valido que la Secuencia de usuario exista
+        try {
+            resultado = await connection.execute("SELECT count(SECUENCIA_USUARIO) FROM latino_owner.dafx_usuarios_sistema WHERE SECUENCIA_USUARIO = :code", {code: secuenciaUser})
+            if(resultado.rows[0][0] === 0){
+                messageErrorValidate(res);
+                return;
+            }
+        } catch (error) {
+            messageErrorServer(res,error);
+            return;
+        }
+
+        try {
+            resultado = await connection.execute("SELECT MAX(CODIGO_PRE_TRANSACCION) FROM latino_owner.fac_pre_transacciones", {});
+            var idpretr=resultado.rows[0][0]+1;
+            console.log(resultado);
+            result2 = await connection.execute("SELECT CODIGO_USUARIO FROM latino_owner.dafx_usuarios_sistema WHERE SECUENCIA_USUARIO = :codes", {codes: secuenciaUser});
+            var codUser=result2.rows[0][0];
+            console.log(codUser);
+            var resultadofinal = await connection.execute("Insert into latino_owner.fac_pre_transacciones values (:codPreTransac,:codEmpre,:codSucur,:codCaja,:NumerPun,"
+            +":SecuenUs,:codUsuario,null,:TipoPretr,1,'S',:SecuenUsuarioIngreso,:UsuarioIngreso,SYSDATE,null,null,null)", {
+                codPreTransac:idpretr,
+                codEmpre:header_codigoEmpresa.toString(),
+                codSucur:idcaja['codigoSucursal'],
+                codCaja:idcaja['codigoCaja'],
+                NumerPun:idcaja['numeroPuntoEmision'],
+                SecuenUs:secuenciaUser,
+                codUsuario:codUser,
+                TipoPretr:nemonicoCanalFacture,
+                SecuenUsuarioIngreso:secuenciaUser,
+                UsuarioIngreso:codUser,
+            });
+            console.log("llega hasta aca");
+            messageSuccess(res,idpretr);
+
+        } catch (error) {
+            messageErrorServer(res,error);
+            return;
+        } finally{
+            // Release the connection
+            releaseConection(connection,res);
+        }
 
     }else {
         messageErrorValidate(res);
