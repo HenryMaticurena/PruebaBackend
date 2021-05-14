@@ -6,6 +6,7 @@ var bodyparser=require('body-parser');
 var oracledb = require('oracledb');
 //Authorisar requerimiento cors
 var cors = require('cors');
+const { autoCommit } = require("oracledb");
 app.use(cors());
 
 app.use(express.json());
@@ -29,12 +30,12 @@ function messageSuccess(respuesta,valor) {
     }));
 }
 
-function messageErrorValidate(respuesta ) {
+function messageErrorValidate(respuesta,mensaje) {
     respuesta.set('Content-Type', 'application/json');
     respuesta.status(400).send(JSON.stringify({
     code: 400,
     success: false,
-    message: "El campo no es valido",
+    message: "El campo "+ mensaje+"no es valido",
     errorData: []
     }));
 }
@@ -77,17 +78,17 @@ app.post('/pre_transacciones/inicializar', async function (req, res,next) {
     if(header_Application != null && header_IdOrganizacion != null && header_codigoEmpresa != null && header_tipoPreTransaccion != null){
         //Valido que codigo_empresa sea un numero
         if (isNaN(header_codigoEmpresa)){
-            messageErrorValidate(res);
+            messageErrorValidate(res,"codigoEmpresa");
             return;
         }
         //Valido que tipoPreTransaccion sea "FACTURA O COTIZACION"
         if("FACTURA" != header_tipoPreTransaccion.toUpperCase() && "COTIZACION"!= header_tipoPreTransaccion.toUpperCase()){
-            messageErrorValidate(res);
+            messageErrorValidate(res,"tipoPreTransaccion");
             return;
         }
         //VALIDO QUE LA APPLICATION SOLO CONTENGA ESTE VALOR
         if("UEhBTlRPTVhfV0VC"!= header_Application){
-            messageErrorValidate(res);
+            messageErrorValidate(res,"Application");
             return
         }
         
@@ -104,7 +105,7 @@ app.post('/pre_transacciones/inicializar', async function (req, res,next) {
             //Valido que el codigo_empresa exista en la db
             resultado =  await connection.execute("SELECT count(codigo_empresa) FROM latino_owner.daf_empresas WHERE codigo_empresa = :code", {code: header_codigoEmpresa});
             if(resultado.rows[0][0] === 0){
-                messageErrorValidate(res);
+                messageErrorValidate(res,"codigoEmpresa");
                 return;
             }
         } catch (error) {
@@ -122,8 +123,8 @@ app.post('/pre_transacciones/inicializar', async function (req, res,next) {
         console.log(secuenciaUser);
 
         //Valido que la nemonicoCanalFacture exista
-        if("FACTURA" != nemonicoCanalFacture.toUpperCase() && "COTIZACION"!= nemonicoCanalFacture.toUpperCase()){
-            messageErrorValidate(res);
+        if("CAJA" != nemonicoCanalFacture.toUpperCase()){
+            messageErrorValidate(res,"nemonicoCanalFactura");
             return;
         }
 
@@ -132,7 +133,7 @@ app.post('/pre_transacciones/inicializar', async function (req, res,next) {
             connection = await oracledb.getConnection(dbConfig);
             resultado = await connection.execute("SELECT count(SECUENCIA_USUARIO) FROM latino_owner.dafx_usuarios_sistema WHERE SECUENCIA_USUARIO = :code", {code: secuenciaUser})
             if(resultado.rows[0][0] === 0){
-                messageErrorValidate(res);
+                messageErrorValidate(res,"SecuenciaUsuario");
                 return;
             }
         } catch (error) {
@@ -145,9 +146,9 @@ app.post('/pre_transacciones/inicializar', async function (req, res,next) {
 
         try {
             connection = await oracledb.getConnection(dbConfig);
-            resultado = await connection.execute("SELECT count(SECUENCIA_USUARIO) FROM latino_owner.dafx_usuarios_sistema WHERE SECUENCIA_USUARIO = :code", {code: secuenciaUser})
+            resultado = await connection.execute("SELECT count(CODIGO_SUCURSAL) FROM latino_owner.daf_sucursales WHERE CODIGO_SUCURSAL = :code", {code: idcaja['codigoSucursal']})
             if(resultado.rows[0][0] === 0){
-                messageErrorValidate(res);
+                messageErrorValidate(res,"codigoSucursal");
                 return;
             }
         } catch (error) {
@@ -172,7 +173,7 @@ app.post('/pre_transacciones/inicializar', async function (req, res,next) {
 
            
             var resultadofinal = await connection.execute("Insert into latino_owner.fac_pre_transacciones values (:codPreTransac,:codEmpre,:codSucur,:codCaja,:NumerPun,"
-            +":SecuenUs,:codUsuario,null,:TipoPretr,1,'S',:SecuenUsuarioIngreso,:UsuarioIngreso,SYSDATE,null,null,null)", {
+            +":SecuenUs,:codUsuario,null,:TipoPretr,1,'S',:SecuenUsuarioIngreso,:UsuarioIngreso,SYSDATE,null,null,null)",  {
                 codPreTransac:idpretr,
                 codEmpre:header_codigoEmpresa.toString(),
                 codSucur:idcaja['codigoSucursal'],
@@ -184,6 +185,7 @@ app.post('/pre_transacciones/inicializar', async function (req, res,next) {
                 SecuenUsuarioIngreso:secuenciaUser,
                 UsuarioIngreso:codUser,
             });
+            // Sentencia me da error porque violo los permisos que tengo anexados connection.commit();
             console.log("llega hasta aca");
             
             messageSuccess(res,idpretr);
@@ -197,7 +199,7 @@ app.post('/pre_transacciones/inicializar', async function (req, res,next) {
         }
 
     }else {
-        messageErrorValidate(res);
+        messageErrorValidate(res,"application o idOrganization o codigoEmpresa o TipoTransaccion");
         return;
     }
     
