@@ -163,14 +163,14 @@ app.post('/pre_transacciones/inicializar', async function (req, res,next) {
             var idpretr=resultado.rows[0][0]+1;
             console.log(resultado);
 
-            releaseConection(connection,res);
-            connection = await oracledb.getConnection(dbConfig);
-            result2 = await connection.execute("SELECT CODIGO_USUARIO FROM latino_owner.dafx_usuarios_sistema WHERE SECUENCIA_USUARIO = :codes", {codes: secuenciaUser});
+           
+            
+            var result2 = await connection.execute("SELECT CODIGO_USUARIO FROM latino_owner.dafx_usuarios_sistema WHERE SECUENCIA_USUARIO = :codes", {codes: secuenciaUser});
             var codUser=result2.rows[0][0];
             console.log(codUser);
-            releaseConection(connection,res);
+           
 
-            connection = await oracledb.getConnection(dbConfig);
+           
             var resultadofinal = await connection.execute("Insert into latino_owner.fac_pre_transacciones values (:codPreTransac,:codEmpre,:codSucur,:codCaja,:NumerPun,"
             +":SecuenUs,:codUsuario,null,:TipoPretr,1,'S',:SecuenUsuarioIngreso,:UsuarioIngreso,SYSDATE,null,null,null)", {
                 codPreTransac:idpretr,
@@ -185,7 +185,6 @@ app.post('/pre_transacciones/inicializar', async function (req, res,next) {
                 UsuarioIngreso:codUser,
             });
             console.log("llega hasta aca");
-            releaseConection(connection,res);
             
             messageSuccess(res,idpretr);
 
