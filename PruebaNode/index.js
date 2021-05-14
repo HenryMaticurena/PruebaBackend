@@ -50,19 +50,23 @@ function messageErrorServer(respuesta,errorcod) {
 }
 
     // Release the connection
-function releaseConection(connection,respuesta) {
-    connection.release(
-        function (err) {
-            if (err) {
-                messageErrorServer(respuesta,err);
-                return;
-            }
-        });
+async function releaseConection(connection,respuesta) {
+    if (connection) {
+        try {
+          await connection.close();
+        } catch (err) {
+            messageErrorServer(respuesta,err);
+            return;
+        }
+      }
+
     }
+
 
 var resultado;
 /////Crear un post de pre_transacciones/inicializar////// en espera
 app.post('/pre_transacciones/inicializar', async function (req, res,next) {
+    'use strict';
     //EXTRAIGO LOS HEADERS REQUERIDOS
     var header_Application = req.header('Application');
     var header_IdOrganizacion = req.header('IdOrganizacion');
@@ -96,6 +100,7 @@ app.post('/pre_transacciones/inicializar', async function (req, res,next) {
         }
 
         try {
+            connection = await oracledb.getConnection(dbConfig);
             //Valido que el codigo_empresa exista en la db
             resultado =  await connection.execute("SELECT count(codigo_empresa) FROM latino_owner.daf_empresas WHERE codigo_empresa = :code", {code: header_codigoEmpresa});
             if(resultado.rows[0][0] === 0){
@@ -105,6 +110,8 @@ app.post('/pre_transacciones/inicializar', async function (req, res,next) {
         } catch (error) {
             messageErrorServer(res,error);
             return;
+        }finally{
+            releaseConection(connection,res);
         }
 
         //Guardo los valores del body a usar
@@ -122,6 +129,7 @@ app.post('/pre_transacciones/inicializar', async function (req, res,next) {
 
         //Valido que la Secuencia de usuario exista
         try {
+            connection = await oracledb.getConnection(dbConfig);
             resultado = await connection.execute("SELECT count(SECUENCIA_USUARIO) FROM latino_owner.dafx_usuarios_sistema WHERE SECUENCIA_USUARIO = :code", {code: secuenciaUser})
             if(resultado.rows[0][0] === 0){
                 messageErrorValidate(res);
@@ -130,15 +138,39 @@ app.post('/pre_transacciones/inicializar', async function (req, res,next) {
         } catch (error) {
             messageErrorServer(res,error);
             return;
+        }finally{
+            releaseConection(connection,res);
+        }
+
+
+        try {
+            connection = await oracledb.getConnection(dbConfig);
+            resultado = await connection.execute("SELECT count(SECUENCIA_USUARIO) FROM latino_owner.dafx_usuarios_sistema WHERE SECUENCIA_USUARIO = :code", {code: secuenciaUser})
+            if(resultado.rows[0][0] === 0){
+                messageErrorValidate(res);
+                return;
+            }
+        } catch (error) {
+            messageErrorServer(res,error);
+            return;
+        }finally{
+            releaseConection(connection,res);
         }
 
         try {
+            connection = await oracledb.getConnection(dbConfig);
             resultado = await connection.execute("SELECT MAX(CODIGO_PRE_TRANSACCION) FROM latino_owner.fac_pre_transacciones", {});
             var idpretr=resultado.rows[0][0]+1;
             console.log(resultado);
+
+            releaseConection(connection,res);
+            connection = await oracledb.getConnection(dbConfig);
             result2 = await connection.execute("SELECT CODIGO_USUARIO FROM latino_owner.dafx_usuarios_sistema WHERE SECUENCIA_USUARIO = :codes", {codes: secuenciaUser});
             var codUser=result2.rows[0][0];
             console.log(codUser);
+            releaseConection(connection,res);
+
+            connection = await oracledb.getConnection(dbConfig);
             var resultadofinal = await connection.execute("Insert into latino_owner.fac_pre_transacciones values (:codPreTransac,:codEmpre,:codSucur,:codCaja,:NumerPun,"
             +":SecuenUs,:codUsuario,null,:TipoPretr,1,'S',:SecuenUsuarioIngreso,:UsuarioIngreso,SYSDATE,null,null,null)", {
                 codPreTransac:idpretr,
@@ -153,6 +185,8 @@ app.post('/pre_transacciones/inicializar', async function (req, res,next) {
                 UsuarioIngreso:codUser,
             });
             console.log("llega hasta aca");
+            releaseConection(connection,res);
+            
             messageSuccess(res,idpretr);
 
         } catch (error) {

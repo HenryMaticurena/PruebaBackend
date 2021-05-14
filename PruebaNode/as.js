@@ -164,3 +164,30 @@ try{
           }
         }
     }
+
+
+
+
+    releaseConection(connection,res);
+            connection = await oracledb.getConnection(dbConfig);
+            result2 = await connection.execute("SELECT CODIGO_USUARIO FROM latino_owner.dafx_usuarios_sistema WHERE SECUENCIA_USUARIO = :codes", {codes: secuenciaUser});
+            var codUser=result2.rows[0][0];
+            console.log(codUser);
+            releaseConection(connection,res);
+
+            connection = await oracledb.getConnection(dbConfig);
+            var resultadofinal = await connection.execute("Insert into latino_owner.fac_pre_transacciones values (:codPreTransac,:codEmpre,:codSucur,:codCaja,:NumerPun,"
+            +":SecuenUs,:codUsuario,null,:TipoPretr,1,'S',:SecuenUsuarioIngreso,:UsuarioIngreso,SYSDATE,null,null,null)", {
+                codPreTransac:idpretr,
+                codEmpre:header_codigoEmpresa.toString(),
+                codSucur:idcaja['codigoSucursal'],
+                codCaja:idcaja['codigoCaja'],
+                NumerPun:idcaja['numeroPuntoEmision'],
+                SecuenUs:secuenciaUser,
+                codUsuario:codUser,
+                TipoPretr:nemonicoCanalFacture,
+                SecuenUsuarioIngreso:secuenciaUser,
+                UsuarioIngreso:codUser,
+            });
+            console.log("llega hasta aca");
+            releaseConection(connection,res);
